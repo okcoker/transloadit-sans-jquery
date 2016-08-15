@@ -1,0 +1,38 @@
+{
+  "name": "transloadit-sans-jquery",
+  "version": "1.0.0",
+  "description": "TransloadIt lib without jquery",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npm run eslint && babel src/index.js -o index.js",
+    "eslint": "eslint src"
+  },
+  "files": [
+    "*.md",
+    "src",
+    "index.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/okcoker/transloadit-sans-jquery.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/okcoker/transloadit-sans-jquery/issues"
+  },
+  "homepage": "https://github.com/okcoker/transloadit-sans-jquery#readme",
+  "devDependencies": {
+    "babel-cli": "6.11.4",
+    "babel-eslint": "6.1.2",
+    "babel-plugin-transform-class-properties": "6.11.5",
+    "babel-preset-es2015": "6.13.2",
+    "eslint": "3.3.0",
+    "eslint-plugin-promise": "2.0.1"
+  },
+  "dependencies": {
+    "fetch-jsonp": "1.0.1",
+    "isomorphic-fetch": "2.2.1"
+  }
+}
