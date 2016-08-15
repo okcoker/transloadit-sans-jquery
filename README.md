@@ -3,16 +3,27 @@ TransloadIt sdk without jQuery, and a few other things
 
 ## Why
 
-The [original library](https://github.com/transloadit/jquery-sdk/) requires jQuery and includes a bunch of view logic that makes it easier for the library consumer to get started with the service. That's fine for most people but I'd rather not include jQuery and I don't need any modal/view logic in the code either.
+The [original library](https://github.com/transloadit/jquery-sdk/) requires jQuery and includes a bunch of view logic that makes it easier for the library consumer to get started with the service. That's fine for most people but I'd rather not include jQuery and I don't need any modal/view logic in the code either. If you're using a bundler such as [webpack](https://github.com/webpack/webpack) or [browserify](https://github.com/substack/browserify-website), this might be easy enough for you to use.
 
 ## Caveats
 
-Uses formData and includes fetch polyfill. It is also written in ES6, so you'll most likely need a bundler such as [webpack](https://github.com/webpack/webpack) to include in your project. Optionally, if you'd like a single file, you can clone this repo, run `npm i` and then `npm run build` to get a single CommonJS module file.
+Uses formData and includes fetch polyfill. As mentioned before, you'll probably need a bundler of some kind to use this.
+
+## Installation
+`npm i -S git://github.com/okcoker/transloadit-sans-jquery.git#v1.0`
+
+Since this is just used by myself so far, and not really well tested, I haven't uploaded it to npm.
 
 ## Example Usage (mine at least)
 
 ```js
-// This is almost the equivalent of `triggerUploadOnFileSelection: true` except I wanted to alter params before starting the upload process.
+
+// You also could require('transloadit-sans-jquery') if that's what you're into.
+import Uploader from 'transloadit-sans-jquery';
+
+// This is almost the equivalent of `triggerUploadOnFileSelection: true` except
+// I wanted to alter params before starting the upload process. You could provide
+// these params when constructing `this._uploader` as well.
 function handleFileSelect() {
     const params = {
         auth: {
