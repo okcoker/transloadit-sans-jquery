@@ -3,6 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
     value: true
 });
+exports.ASSEMBLY_COMPLETED = exports.ASSEMBLY_CANCELED = exports.ASSEMBLY_EXECUTING = exports.ASSEMBLY_UPLOADING = undefined;
 
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
@@ -20,6 +21,11 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 // https://github.com/matthew-andrews/isomorphic-fetch
 require('isomorphic-fetch');
+
+var ASSEMBLY_UPLOADING = exports.ASSEMBLY_UPLOADING = 'ASSEMBLY_UPLOADING';
+var ASSEMBLY_EXECUTING = exports.ASSEMBLY_EXECUTING = 'ASSEMBLY_EXECUTING';
+var ASSEMBLY_CANCELED = exports.ASSEMBLY_CANCELED = 'ASSEMBLY_CANCELED';
+var ASSEMBLY_COMPLETED = exports.ASSEMBLY_COMPLETED = 'ASSEMBLY_COMPLETED';
 
 var PROTOCOL = 'https://';
 
@@ -553,10 +559,10 @@ var Uploader = function () {
                 }
 
                 _this7.pollRetries = 0;
-                // var isUploading = assembly.ok === 'ASSEMBLY_UPLOADING';
-                var isExecuting = assembly.ok === 'ASSEMBLY_EXECUTING';
-                var isCanceled = assembly.ok === 'ASSEMBLY_CANCELED';
-                var isComplete = assembly.ok === 'ASSEMBLY_COMPLETED';
+                // var isUploading = assembly.ok === ASSEMBLY_UPLOADING;
+                var isExecuting = assembly.ok === ASSEMBLY_EXECUTING;
+                var isCanceled = assembly.ok === ASSEMBLY_CANCELED;
+                var isComplete = assembly.ok === ASSEMBLY_COMPLETED;
 
                 if (assembly.bytes_expected > 0) {
                     _this7._options.onProgress(assembly.bytes_received, assembly.bytes_expected, assembly);

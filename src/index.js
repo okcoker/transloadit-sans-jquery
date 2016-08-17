@@ -5,6 +5,11 @@ import fetchJSONP from 'fetch-jsonp';
 // https://github.com/matthew-andrews/isomorphic-fetch
 require('isomorphic-fetch');
 
+export const ASSEMBLY_UPLOADING = 'ASSEMBLY_UPLOADING';
+export const ASSEMBLY_EXECUTING = 'ASSEMBLY_EXECUTING';
+export const ASSEMBLY_CANCELED = 'ASSEMBLY_CANCELED';
+export const ASSEMBLY_COMPLETED = 'ASSEMBLY_COMPLETED';
+
 let PROTOCOL = 'https://';
 
 if (typeof document !== 'undefined') {
@@ -523,10 +528,10 @@ export default class Uploader {
             }
 
             this.pollRetries = 0;
-            // var isUploading = assembly.ok === 'ASSEMBLY_UPLOADING';
-            var isExecuting = assembly.ok === 'ASSEMBLY_EXECUTING';
-            var isCanceled = assembly.ok === 'ASSEMBLY_CANCELED';
-            var isComplete = assembly.ok === 'ASSEMBLY_COMPLETED';
+            // var isUploading = assembly.ok === ASSEMBLY_UPLOADING;
+            var isExecuting = assembly.ok === ASSEMBLY_EXECUTING;
+            var isCanceled = assembly.ok === ASSEMBLY_CANCELED;
+            var isComplete = assembly.ok === ASSEMBLY_COMPLETED;
 
             if (assembly.bytes_expected > 0) {
                 this._options.onProgress(assembly.bytes_received, assembly.bytes_expected, assembly);
