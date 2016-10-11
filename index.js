@@ -84,11 +84,7 @@ var Uploader = function () {
             return false;
         };
 
-        this.assemblyId = null;
-
-        this.instance = null;
-        this.documentTitle = null;
-        this.timer = null;
+        this.timers = {};
         this._options = {
             service: DEFAULT_SERVICE,
             assets: PROTOCOL + 'assets.transloadit.com/',
@@ -121,21 +117,18 @@ var Uploader = function () {
         };
         this.uploads = [];
         this.results = {};
-        this.ended = null;
+        this._ended = {};
         this.pollStarted = null;
         this.pollRetries = 0;
-        this.started = false;
-        this.assembly = null;
+        this.started = {};
+        this.assemblyMap = {};
         this.params = null;
-
-        this.bytesReceivedBefore = 0;
+        this._assemblyInstanceMap = {};
 
         this.paramsElement = null;
         this.form = null;
         this.files = null;
-        this.iframe = null;
 
-        this._lastPoll = 0;
         this._lastMSecs = 0;
         this._lastNSecs = 0;
         this._clockseq = 0;
@@ -211,7 +204,6 @@ var Uploader = function () {
         value: function getBoredInstance() {
             var self = this;
 
-            this.instance = null;
             var url = this._options.service + 'instances/bored';
             var canUseCustomBoredLogic = true;
 
@@ -222,14 +214,12 @@ var Uploader = function () {
                     return response.json();
                 }).then(function (instance) {
                     if (instance.error) {
-                        self.ended = true;
                         instance.url = url;
                         self._options.onError(instance);
                         return;
                     }
 
-                    self.instance = instance.api2_host;
-                    self.startPoll();
+                    self.startPoll(instance.api2_host);
                     return;
                 }).catch(function (jsonpErr) {
                     if (canUseCustomBoredLogic && self._options.service === DEFAULT_SERVICE) {
@@ -244,7 +234,6 @@ var Uploader = function () {
 
                             return proceed();
                         }).catch(function (err) {
-                            self.ended = true;
                             err = {
                                 error: 'BORED_INSTANCE_ERROR'
                             };
@@ -253,8 +242,6 @@ var Uploader = function () {
 
                         return;
                     }
-
-                    self.ended = true;
 
                     var reason = 'JSONP bored instance request status: ' + status;
                     reason += ', err: ' + jsonpErr;
@@ -272,28 +259,22 @@ var Uploader = function () {
         }
     }, {
         key: 'startPoll',
-        value: function startPoll() {
+        value: function startPoll(instance) {
             var _this3 = this;
 
-            this.started = false;
-            this.ended = false;
-            this.bytesReceivedBefore = 0;
             this.pollRetries = 0;
             this.uploads = [];
             this._uploadFileIds = [];
             this._resultFileIds = [];
             this.results = {};
 
-            this.assemblyId = this._genUuid();
+            var assemblyId = this._genUuid();
 
-            this.iframe = document.createElement('iframe');
-            this.iframe.id = 'transloadit-' + this.assemblyId;
-            this.iframe.name = 'transloadit-' + this.assemblyId;
-            this.iframe.style.display = 'none';
+            this.started[assemblyId] = false;
+            this._ended[assemblyId] = false;
+            this._assemblyInstanceMap[assemblyId] = instance;
 
-            document.body.appendChild(this.iframe);
-
-            var url = PROTOCOL + this.instance + '/assemblies/' + this.assemblyId + '?redirect=false';
+            var url = PROTOCOL + instance + '/assemblies/' + assemblyId + '?redirect=false';
             var assemblyParams = this._options.params;
 
             if (this.paramsElement) {
@@ -318,9 +299,8 @@ var Uploader = function () {
                 body: this._options.formData
             });
 
-            this._lastPoll = +new Date();
             setTimeout(function () {
-                return _this3._poll();
+                return _this3._poll({ assemblyId: assemblyId, instance: instance });
             }, 300);
         }
     }, {
@@ -371,15 +351,15 @@ var Uploader = function () {
         }
     }, {
         key: 'stop',
-        value: function stop() {
-            this.ended = true;
+        value: function stop(assemblyId) {
+            this._ended[assemblyId] = true;
         }
     }, {
         key: 'cancel',
-        value: function cancel() {
+        value: function cancel(assemblyId) {
             var _this5 = this;
 
-            if (this.ended) {
+            if (this._ended[assemblyId]) {
                 return;
             }
 
@@ -387,16 +367,15 @@ var Uploader = function () {
                 this.paramsElement.insertBefore(this.form, this.paramsElement.firstChild);
             }
 
-            clearTimeout(this.timer);
+            clearTimeout(this.timers[assemblyId]);
 
-            this._poll('?method=delete');
+            var instance = this._assemblyInstanceMap[assemblyId];
 
-            if (navigator.appName === 'Microsoft Internet Explorer') {
-                this.iframe.contentWindow.document.execCommand('Stop');
-            }
+            this._poll({ query: '?method=delete', assemblyId: assemblyId, instance: instance });
 
             setTimeout(function () {
-                return _this5.iframe.parentNode.removeChild(_this5.iframe);
+                delete _this5._assemblyInstanceMap[assemblyId];
+                delete _this5._ended[assemblyId];
             }, 500);
         }
     }, {
@@ -420,28 +399,6 @@ var Uploader = function () {
                 this.form.removeEventListener('submit.transloadit', this._handleFormSubmit);
                 this.form.submit();
             }
-        }
-    }, {
-        key: 'getUTCDatetime',
-        value: function getUTCDatetime() {
-            var now = new Date();
-            var d = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-
-            var pad = function pad(n) {
-                return n < 10 ? '0' + n : n;
-            };
-            var tz = d.getTimezoneOffset();
-            var tzs = (tz > 0 ? '-' : '+') + pad(parseInt(tz / 60, 10));
-
-            if (tz % 60 !== 0) {
-                tzs += pad(tz % 60);
-            }
-
-            if (tz === 0) {
-                tzs = 'Z';
-            }
-
-            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + tzs;
         }
     }, {
         key: '_findBoredInstanceUrl',
@@ -504,17 +461,27 @@ var Uploader = function () {
         }
     }, {
         key: '_poll',
-        value: function _poll(query) {
+        value: function _poll() {
             var _this7 = this;
 
-            if (this.ended) {
+            var options = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+            var query = options.query;
+            var assemblyId = options.assemblyId;
+            var instance = options.instance;
+
+            if (this._ended[assemblyId]) {
                 return;
+            }
+
+            if (!assemblyId || !instance) {
+                console.warn('No assemblyId or instance found', assemblyId, instance);
+                console.trace();
             }
 
             this.pollStarted = +new Date();
 
-            var instance = 'status-' + this.instance;
-            var url = '' + PROTOCOL + instance + /assemblies/ + this.assemblyId;
+            var instanceId = 'status-' + instance;
+            var url = '' + PROTOCOL + instanceId + /assemblies/ + assemblyId;
 
             if (query) {
                 url += query;
@@ -525,7 +492,7 @@ var Uploader = function () {
             }).then(function (res) {
                 return res.json();
             }).then(function (assembly) {
-                if (_this7.ended) {
+                if (_this7._ended[assemblyId]) {
                     return;
                 }
 
@@ -534,24 +501,25 @@ var Uploader = function () {
                     _this7.pollRetries++;
 
                     if (_this7.pollRetries > _this7._options.poll404Retries) {
-                        _this7.ended = true;
+                        _this7._ended[assemblyId] = true;
                         _this7._options.onError(assembly);
                         return;
                     }
 
                     setTimeout(function () {
-                        return _this7._poll();
+                        return _this7._poll(options);
                     }, 400);
                     return;
                 }
+
                 if (assembly.error) {
-                    _this7.ended = true;
+                    _this7._ended[assemblyId] = true;
                     _this7._options.onError(assembly);
                     return;
                 }
 
-                if (!_this7.started && assembly.bytes_expected > 0) {
-                    _this7.started = true;
+                if (!_this7.started[assemblyId] && assembly.bytes_expected > 0) {
+                    _this7.started[assemblyId] = true;
                     _this7._options.onStart(assembly);
                 }
 
@@ -591,7 +559,7 @@ var Uploader = function () {
                 }
 
                 if (isCanceled) {
-                    _this7.ended = true;
+                    _this7._ended[assemblyId] = true;
                     _this7._options.onCancel(assembly);
                     return;
                 }
@@ -599,7 +567,7 @@ var Uploader = function () {
                 var isEnded = isComplete || !_this7._options.wait && isExecuting;
 
                 if (isEnded) {
-                    _this7.ended = true;
+                    _this7._ended[assemblyId] = true;
                     assembly.uploads = _this7.uploads;
                     assembly.results = _this7.results;
                     _this7._options.onSuccess(assembly);
@@ -614,19 +582,18 @@ var Uploader = function () {
                 var ping = _this7.pollStarted - +new Date();
                 var timeout = ping < _this7._options.interval ? _this7._options.interval : ping;
 
-                _this7.timer = setTimeout(function () {
-                    return _this7._poll();
+                _this7.timers[assemblyId] = setTimeout(function () {
+                    return _this7._poll(options);
                 }, timeout);
-                _this7.lastPoll = +new Date();
                 return;
             }).catch(function (jsonpErr) {
-                if (_this7.ended) {
+                if (_this7._ended[assemblyId]) {
                     return;
                 }
 
                 _this7.pollRetries++;
                 if (_this7.pollRetries > _this7._options.pollConnectionRetries) {
-                    _this7.ended = true;
+                    _this7._ended[assemblyId] = true;
 
                     var reason = 'JSONP status poll request status: ' + status;
                     reason += ', err: ' + jsonpErr;
@@ -641,39 +608,9 @@ var Uploader = function () {
                 }
 
                 setTimeout(function () {
-                    return _this7._poll();
+                    return _this7._poll(options);
                 }, 350);
             });
-        }
-    }, {
-        key: '_duration',
-        value: function _duration(t) {
-            var min = 60;
-            var h = 60 * min;
-            var hours = Math.floor(t / h);
-
-            t -= hours * h;
-
-            var minutes = Math.floor(t / min);
-            t -= minutes * min;
-
-            var r = '';
-            if (hours > 0) {
-                r += hours + 'h ';
-            }
-            if (minutes > 0) {
-                r += minutes + 'min ';
-            }
-            if (t > 0) {
-                t = t.toFixed(0);
-                r += t + 's';
-            }
-
-            if (r === '') {
-                r = '0s';
-            }
-
-            return r;
         }
     }, {
         key: '_genUuid',

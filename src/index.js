@@ -54,11 +54,7 @@ if (typeof Element !== 'undefined' && !Element.prototype.matches) {
 
 export default class Uploader {
     constructor(form, options) {
-        this.assemblyId = null;
-
-        this.instance = null;
-        this.documentTitle = null;
-        this.timer = null;
+        this.timers = {};
         this._options = {
             service: DEFAULT_SERVICE,
             assets: PROTOCOL + 'assets.transloadit.com/',
@@ -90,21 +86,18 @@ export default class Uploader {
         };
         this.uploads = [];
         this.results = {};
-        this.ended = null;
+        this._ended = {};
         this.pollStarted = null;
         this.pollRetries = 0;
-        this.started = false;
-        this.assembly = null;
+        this.started = {};
+        this.assemblyMap = {};
         this.params = null;
-
-        this.bytesReceivedBefore = 0;
+        this._assemblyInstanceMap = {};
 
         this.paramsElement = null;
         this.form = null;
         this.files = null;
-        this.iframe = null;
 
-        this._lastPoll = 0;
         this._lastMSecs = 0;
         this._lastNSecs = 0;
         this._clockseq = 0;
@@ -175,7 +168,6 @@ export default class Uploader {
     getBoredInstance() {
         var self = this;
 
-        this.instance = null;
         var url = `${this._options.service}instances/bored`;
         var canUseCustomBoredLogic = true;
 
@@ -186,14 +178,12 @@ export default class Uploader {
             .then((response) => response.json())
             .then((instance) => {
                 if (instance.error) {
-                    self.ended = true;
                     instance.url = url;
                     self._options.onError(instance);
                     return;
                 }
 
-                self.instance = instance.api2_host;
-                self.startPoll();
+                self.startPoll(instance.api2_host);
                 return;
             })
             .catch((jsonpErr) => {
@@ -211,7 +201,6 @@ export default class Uploader {
                         return proceed();
                     })
                     .catch((err) => {
-                        self.ended = true;
                         err = {
                             error: 'BORED_INSTANCE_ERROR'
                         };
@@ -220,8 +209,6 @@ export default class Uploader {
 
                     return;
                 }
-
-                self.ended = true;
 
                 var reason = `JSONP bored instance request status: ${status}`;
                 reason += ', err: ' + jsonpErr;
@@ -238,26 +225,20 @@ export default class Uploader {
         proceed();
     }
 
-    startPoll() {
-        this.started = false;
-        this.ended = false;
-        this.bytesReceivedBefore = 0;
+    startPoll(instance) {
         this.pollRetries = 0;
         this.uploads = [];
         this._uploadFileIds = [];
         this._resultFileIds = [];
         this.results = {};
 
-        this.assemblyId = this._genUuid();
+        const assemblyId = this._genUuid();
 
-        this.iframe = document.createElement('iframe');
-        this.iframe.id = `transloadit-${this.assemblyId}`;
-        this.iframe.name = `transloadit-${this.assemblyId}`;
-        this.iframe.style.display = 'none';
+        this.started[assemblyId] = false;
+        this._ended[assemblyId] = false;
+        this._assemblyInstanceMap[assemblyId] = instance;
 
-        document.body.appendChild(this.iframe);
-
-        const url = PROTOCOL + this.instance + '/assemblies/' + this.assemblyId + '?redirect=false';
+        const url = PROTOCOL + instance + '/assemblies/' + assemblyId + '?redirect=false';
         let assemblyParams = this._options.params;
 
         if (this.paramsElement) {
@@ -282,8 +263,7 @@ export default class Uploader {
             body: this._options.formData
         });
 
-        this._lastPoll = +new Date();
-        setTimeout(() => this._poll(), 300);
+        setTimeout(() => this._poll({ assemblyId, instance }), 300);
     }
 
     detectFileInputs() {
@@ -331,12 +311,12 @@ export default class Uploader {
         }
     }
 
-    stop() {
-        this.ended = true;
+    stop(assemblyId) {
+        this._ended[assemblyId] = true;
     }
 
-    cancel() {
-        if (this.ended) {
+    cancel(assemblyId) {
+        if (this._ended[assemblyId]) {
             return;
         }
 
@@ -344,15 +324,16 @@ export default class Uploader {
             this.paramsElement.insertBefore(this.form, this.paramsElement.firstChild);
         }
 
-        clearTimeout(this.timer);
+        clearTimeout(this.timers[assemblyId]);
 
-        this._poll('?method=delete');
+        const instance = this._assemblyInstanceMap[assemblyId];
 
-        if (navigator.appName === 'Microsoft Internet Explorer') {
-            this.iframe.contentWindow.document.execCommand('Stop');
-        }
+        this._poll({ query: '?method=delete', assemblyId, instance });
 
-        setTimeout(() => this.iframe.parentNode.removeChild(this.iframe), 500);
+        setTimeout(() => {
+            delete this._assemblyInstanceMap[assemblyId];
+            delete this._ended[assemblyId];
+        }, 500);
     }
 
     submitForm() {
@@ -374,39 +355,6 @@ export default class Uploader {
             this.form.removeEventListener('submit.transloadit', this._handleFormSubmit);
             this.form.submit();
         }
-    }
-
-    getUTCDatetime() {
-        var now = new Date();
-        var d = new Date(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate(),
-            now.getUTCHours(),
-            now.getUTCMinutes(),
-            now.getUTCSeconds()
-        );
-
-        var pad = function(n) {
-            return n < 10 ? '0' + n : n;
-        };
-        var tz = d.getTimezoneOffset();
-        var tzs = (tz > 0 ? '-' : '+') + pad(parseInt(tz / 60, 10));
-
-        if (tz % 60 !== 0) {
-            tzs += pad(tz % 60);
-        }
-
-        if (tz === 0) {
-            tzs = 'Z';
-        }
-
-        return d.getFullYear() + '-' +
-                pad(d.getMonth() + 1) + '-' +
-                pad(d.getDate()) + 'T' +
-                pad(d.getHours()) + ':' +
-                pad(d.getMinutes()) + ':' +
-                pad(d.getSeconds()) + tzs;
     }
 
     _handleFormSubmit = () => {
@@ -476,15 +424,21 @@ export default class Uploader {
         });
     }
 
-    _poll(query) {
-        if (this.ended) {
+    _poll(options = {}) {
+        const { query, assemblyId, instance } = options;
+        if (this._ended[assemblyId]) {
             return;
+        }
+
+        if (!assemblyId || !instance) {
+            console.warn('No assemblyId or instance found', assemblyId, instance);
+            console.trace();
         }
 
         this.pollStarted = +new Date();
 
-        const instance = `status-${this.instance}`;
-        let url = `${PROTOCOL}${instance}${/assemblies/}${this.assemblyId}`;
+        const instanceId = `status-${instance}`;
+        let url = `${PROTOCOL}${instanceId}${/assemblies/}${assemblyId}`;
 
         if (query) {
             url += query;
@@ -495,7 +449,7 @@ export default class Uploader {
         })
         .then((res) => res.json())
         .then((assembly) => {
-            if (this.ended) {
+            if (this._ended[assemblyId]) {
                 return;
             }
 
@@ -504,22 +458,23 @@ export default class Uploader {
                 this.pollRetries++;
 
                 if (this.pollRetries > this._options.poll404Retries) {
-                    this.ended = true;
+                    this._ended[assemblyId] = true;
                     this._options.onError(assembly);
                     return;
                 }
 
-                setTimeout(() => this._poll(), 400);
+                setTimeout(() => this._poll(options), 400);
                 return;
             }
+
             if (assembly.error) {
-                this.ended = true;
+                this._ended[assemblyId] = true;
                 this._options.onError(assembly);
                 return;
             }
 
-            if (!this.started && assembly.bytes_expected > 0) {
-                this.started = true;
+            if (!this.started[assemblyId] && assembly.bytes_expected > 0) {
+                this.started[assemblyId] = true;
                 this._options.onStart(assembly);
             }
 
@@ -559,7 +514,7 @@ export default class Uploader {
             }
 
             if (isCanceled) {
-                this.ended = true;
+                this._ended[assemblyId] = true;
                 this._options.onCancel(assembly);
                 return;
             }
@@ -567,7 +522,7 @@ export default class Uploader {
             var isEnded = isComplete || (!this._options.wait && isExecuting);
 
             if (isEnded) {
-                this.ended = true;
+                this._ended[assemblyId] = true;
                 assembly.uploads = this.uploads;
                 assembly.results = this.results;
                 this._options.onSuccess(assembly);
@@ -580,18 +535,17 @@ export default class Uploader {
             var ping = this.pollStarted - +new Date();
             var timeout = ping < this._options.interval ? this._options.interval : ping;
 
-            this.timer = setTimeout(() => this._poll(), timeout);
-            this.lastPoll = +new Date();
+            this.timers[assemblyId] = setTimeout(() => this._poll(options), timeout);
             return;
         })
         .catch((jsonpErr) => {
-            if (this.ended) {
+            if (this._ended[assemblyId]) {
                 return;
             }
 
             this.pollRetries++;
             if (this.pollRetries > this._options.pollConnectionRetries) {
-                this.ended = true;
+                this._ended[assemblyId] = true;
 
                 var reason = 'JSONP status poll request status: ' + status;
                 reason += ', err: ' + jsonpErr;
@@ -605,37 +559,8 @@ export default class Uploader {
                 return;
             }
 
-            setTimeout(() => this._poll(), 350);
+            setTimeout(() => this._poll(options), 350);
         });
-    }
-
-    _duration(t) {
-        var min = 60;
-        var h = 60 * min;
-        var hours = Math.floor(t / h);
-
-        t -= hours * h;
-
-        var minutes = Math.floor(t / min);
-        t -= minutes * min;
-
-        var r = '';
-        if (hours > 0) {
-            r += hours + 'h ';
-        }
-        if (minutes > 0) {
-            r += minutes + 'min ';
-        }
-        if (t > 0) {
-            t = t.toFixed(0);
-            r += t + 's';
-        }
-
-        if (r === '') {
-            r = '0s';
-        }
-
-        return r;
     }
 
     _genUuid(options, buf, offset) {
