@@ -264,21 +264,17 @@ export default class Uploader {
             assemblyParams = this.paramsElement.value;
         }
 
-        if (this._options.formData instanceof FormData) {
-            this._options.formData.append('params', assemblyParams);
+        if (!(this._options.formData instanceof FormData)) {
+            this._options.formData = new FormData(this.form);
         }
-        else {
-            const formData = new FormData(this.form);
-            formData.append('params', JSON.stringify(assemblyParams));
 
-            if (this._options.formData) {
-                for (let i = 0; i < this._options.formData.length; i++) {
-                    const tupel = this._options.formData[i];
-                    formData.append(tupel[0], tupel[1], tupel[2]);
-                }
+        this._options.formData.append('params', JSON.stringify(assemblyParams));
+
+        if (this._options.formData) {
+            for (let i = 0; i < this._options.formData.length; i++) {
+                const tupel = this._options.formData[i];
+                this._options.formData.append(tupel[0], tupel[1], tupel[2]);
             }
-
-            this._options.formData = formData;
         }
 
         fetch(url, {

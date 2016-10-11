@@ -300,20 +300,17 @@ var Uploader = function () {
                 assemblyParams = this.paramsElement.value;
             }
 
-            if (this._options.formData instanceof FormData) {
-                this._options.formData.append('params', assemblyParams);
-            } else {
-                var formData = new FormData(this.form);
-                formData.append('params', JSON.stringify(assemblyParams));
+            if (!(this._options.formData instanceof FormData)) {
+                this._options.formData = new FormData(this.form);
+            }
 
-                if (this._options.formData) {
-                    for (var i = 0; i < this._options.formData.length; i++) {
-                        var tupel = this._options.formData[i];
-                        formData.append(tupel[0], tupel[1], tupel[2]);
-                    }
+            this._options.formData.append('params', JSON.stringify(assemblyParams));
+
+            if (this._options.formData) {
+                for (var i = 0; i < this._options.formData.length; i++) {
+                    var tupel = this._options.formData[i];
+                    this._options.formData.append(tupel[0], tupel[1], tupel[2]);
                 }
-
-                this._options.formData = formData;
             }
 
             fetch(url, {
