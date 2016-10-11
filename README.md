@@ -10,7 +10,7 @@ The [original library](https://github.com/transloadit/jquery-sdk/) requires jQue
 Uses formData and includes fetch polyfill. As mentioned before, you'll probably need a bundler of some kind to use this.
 
 ## Installation
-`npm i -S git://github.com/okcoker/transloadit-sans-jquery.git#v1.0`
+`npm i -S git://github.com/okcoker/transloadit-sans-jquery.git#v1.1.1`
 
 Since this is just used by myself so far, and not really well tested, I haven't uploaded it to npm.
 
